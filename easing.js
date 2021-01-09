@@ -34,25 +34,21 @@ module.exports = function(RED) {
         config.numberOfValues = _.toNumber(config.numberOfValues);
 
         // holds interval
-        var interval = null;
+        var interval = {};
 
         var lastValue = 0;
 
         node.on('input', function(msg) {
 
             var startValue, endValue;
-            
-            // check if reset is send
-            if (msg.topic == 'reset') {
-                stopInterval(interval)
-                return
+
             // if payload is a number, use that as endValue 
-            } else if (_.isNumber(msg.payload)) {
+            if (_.isNumber(msg.payload)) {
                 startValue = lastValue;
                 endValue = msg.payload;
             // else check if payload has to and from values
             } else if (_.isObject(msg.payload)) {
-                startValue = _.has(msg.payload,'from') ? msg.payload.from : 0.0;
+                startValue = _.has(msg.payload,'from') ? msg.payload.from : lastValue;
                 endValue = _.has(msg.payload,'to') ? msg.payload.to : 1.0;
             } else {
                 startValue = 0.0;
@@ -76,19 +72,18 @@ module.exports = function(RED) {
             } else if (config.outputType === "overTime") {
 
                 let duration = _.has(msg.payload, 'duration') ? msg.payload.duration : config.duration;
-                let intervallTime = _.has(msg.payload, 'interval') ? msg.payload.interval : config.interval
                 let elapsed = 0;
 
                 // clear previous interval
-                stopInterval(interval);
+                stopInterval(interval[msg.topic]);
 
                 //send start value
                 msg.payload = startValue
                 node.send(msg);
 
                 // start interval
-                interval = setInterval( () => {
-                    elapsed += intervallTime;
+                interval[msg.topic] = setInterval( () => {
+                    elapsed += config.interval;
 
                     let t = Math.min(1.0, elapsed / duration) 
                     let val = startValue + EasingFunctions[config.easingType](t) * (endValue - startValue);
@@ -99,15 +94,16 @@ module.exports = function(RED) {
                     node.send(msg);
 
                     if (t >= 1.0) {
-                        stopInterval(interval);
+                        stopInterval(interval[msg.topic]);
                     }
-                }, intervallTime)
+                }, config.interval)
             }
-            
         });
 
         node.on('close', () => {
-            stopInterval(interval);
+	    for (interva of interval){
+                stopInterval(interva);
+	    }
         })
     }
     RED.nodes.registerType("easing", Easing);
